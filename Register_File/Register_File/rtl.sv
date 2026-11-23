@@ -1,35 +1,24 @@
-module register_file(
-    input  logic [4:0]  rs1_sel,
-    input  logic [4:0]  rs2_sel,
-    input  logic        reg_write,
+
+module regfile(
     input  logic        clk,
-    input  logic        reset,
-    input  logic [31:0] wb_data,
-    input  logic [4:0]  rd_sel,
-    output logic [31:0] rs1_data,
-    output logic [31:0] rs2_data
+    input  logic        we3,
+    input  logic [4:0]  a1, a2, a3,
+    input  logic [31:0] wd3,
+    output logic [31:0] rd1, rd2
 );
 
-    logic [31:0] register [31:0];
+    logic [31:0] rf [31:0];
 
-    // Asynchronous reset and synchronous write
-    always_ff @(posedge clk or posedge reset) begin
-        if (reset) begin
-            for (int i = 0; i < 32; i = i + 1)
-                register[i] <= 32'b0;
-        end
-        else if (reg_write && rd_sel != 5'd0) begin
-            register[rd_sel] <= wb_data;
-        end
+    // Write operation
+    always_ff @(posedge clk) begin
+        if (we3 && (a3 != 5'd0))
+            rf[a3] <= wd3;
     end
 
-    // Asynchronous read ports
+    // Two asynchronous read ports
     always_comb begin
-        rs1_data = (rs1_sel == 5'd0)
-                   ? 32'b0 : register[rs1_sel];
-
-        rs2_data = (rs2_sel == 5'd0)
-                   ? 32'b0 : register[rs2_sel];
+        rd1 = (a1 == 5'd0) ? 32'b0 : rf[a1];
+        rd2 = (a2 == 5'd0) ? 32'b0 : rf[a2];
     end
 
 endmodule
