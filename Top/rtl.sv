@@ -1,4 +1,3 @@
-
 module top(
     input  logic        clk,
     input  logic        reset,
@@ -11,13 +10,13 @@ module top(
     logic [31:0] Instr;
     logic [31:0] ReadData;
 
-    // Instruction memory
-    imem imem_inst(
+    // Instruction Memory
+    imem im(
         .a(PC),
         .rd(Instr)
     );
 
-    // RISC-V processor
+    // Processor
     riscvsingle cpu(
         .clk(clk),
         .reset(reset),
@@ -29,8 +28,8 @@ module top(
         .ReadData(ReadData)
     );
 
-    // Data memory
-    dmem dmem_inst(
+    // Data Memory
+    dmem dm(
         .clk(clk),
         .we(MemWrite),
         .a(DataAdr),
