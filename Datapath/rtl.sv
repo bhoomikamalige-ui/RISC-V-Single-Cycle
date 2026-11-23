@@ -16,97 +16,81 @@ module datapath(
     input  logic [31:0] ReadData
 );
 
-    logic [31:0] PCNext;
-    logic [31:0] PCPlus4;
-    logic [31:0] PCTarget;
-    logic [31:0] ImmExt;
-    logic [31:0] SrcA;
-    logic [31:0] SrcB;
-    logic [31:0] Result;
-    logic [31:0] RD1;
-    logic [31:0] RD2;
+    logic [31:0] pc_next, pc_plus4, pc_target;
+    logic [31:0] rd1, rd2, srcB;
+    logic [31:0] ImmExt, Result;
+    logic [31:0] regs [0:31];
+
+    integer i;
 
     // Program Counter
-    flopr #(.WIDTH(32)) pc_reg (
-        .d(PCNext),
-        .clk(clk),
-        .reset(reset),
-        .q(PC)
-    );
+    always_ff @(posedge clk or posedge reset) begin
+        if (reset)
+            PC <= 32'h80000000;
+        else
+            PC <= pc_next;
+    end
 
-    // PC + 4
-    adder pc_adder (
-        .a(PC),
-        .b(32'd4),
-        .y(PCPlus4)
-    );
-
-    // Immediate Generator
-    extend imm_gen (
-        .instr(Instr[31:7]),
-        .immsrc(ImmSrc),
-        .immext(ImmExt)
-    );
-
-    // Branch / Jump target = PC + (Immediate << 1)
-    adder target_adder (
-        .a(PC),
-        .b(ImmExt << 1),
-        .y(PCTarget)
-    );
-
-    // Next PC selection
-    mux2 #(.WIDTH(32)) pc_mux (
-        .d0(PCPlus4),
-        .d1(PCTarget),
-        .s(PCSrc),
-        .y(PCNext)
-    );
+    assign pc_plus4 = PC + 32'd4;
+    assign pc_target = PC + (ImmExt << 1);
+    assign pc_next = PCSrc ? pc_target : pc_plus4;
 
     // Register File
-    regfile rf (
-        .clk(clk),
-        .we3(RegWrite),
-        .a1(Instr[19:15]),
-        .a2(Instr[24:20]),
-        .a3(Instr[11:7]),
-        .wd3(Result),
-        .rd1(RD1),
-        .rd2(RD2)
-    );
+    assign rd1 = (Instr[19:15] == 0) ? 32'd0 : regs[Instr[19:15]];
+    assign rd2 = (Instr[24:20] == 0) ? 32'd0 : regs[Instr[24:20]];
 
-    assign WriteData = RD2;
+    always_ff @(posedge clk or posedge reset) begin
+        if (reset) begin
+            for (i = 0; i < 32; i = i + 1)
+                regs[i] <= 32'd0;
+        end
+        else if (RegWrite && (Instr[11:7] != 0)) begin
+            regs[Instr[11:7]] <= Result;
+        end
+    end
 
-    // ALU input selection
-    assign SrcA = RD1;
+    assign WriteData = rd2;
 
-    mux2 #(.WIDTH(32)) srcb_mux (
-        .d0(RD2),
-        .d1(ImmExt),
-        .s(ALUSrc),
-        .y(SrcB)
-    );
+    // Immediate Generator
+    always_comb begin
+        case (ImmSrc)
+            2'b00: ImmExt = {{20{Instr[31]}}, Instr[31:20]};
+            2'b01: ImmExt = {{20{Instr[31]}}, Instr[31:25], Instr[11:7]};
+            2'b10: ImmExt = {{19{Instr[31]}}, Instr[31], Instr[7],
+                              Instr[30:25], Instr[11:8]};
+            2'b11: ImmExt = {{11{Instr[31]}}, Instr[31], Instr[19:12],
+                              Instr[20], Instr[30:21]};
+            default: ImmExt = 32'd0;
+        endcase
+    end
 
     // ALU
-    alu alu_unit (
-        .a(SrcA),
-        .b(SrcB),
-        .alucontrol(ALUControl),
-        .result(ALUResult)
-    );
+    assign srcB = ALUSrc ? ImmExt : rd2;
 
-    assign Zero = (ALUResult == 32'b0);
+    always_comb begin
+        case (ALUControl)
+            3'b000: ALUResult = rd1 + srcB;
+            3'b001: ALUResult = rd1 - srcB;
+            3'b010: ALUResult = rd1 & srcB;
+            3'b011: ALUResult = rd1 | srcB;
+            3'b100: ALUResult = rd1 ^ srcB;
+            3'b101: ALUResult = ($signed(rd1) < $signed(srcB)) ? 32'd1 : 32'd0;
+            3'b110: ALUResult = rd1 << srcB[4:0];
+            3'b111: ALUResult = rd1 >> srcB[4:0];
+            default: ALUResult = 32'd0;
+        endcase
+    end
 
-    // Write-back selection:
-    // 00 = ALU result
-    // 01 = Data memory
-    // 10 = PC + 4
-    mux3 #(.WIDTH(32)) result_mux (
-        .d0(ALUResult),
-        .d1(ReadData),
-        .d2(PCPlus4),
-        .s(ResultSrc),
-        .y(Result)
-    );
+    assign Zero = (ALUResult == 32'd0);
+
+    // Write-back Result Multiplexer
+    always_comb begin
+        case (ResultSrc)
+            2'b00: Result = ALUResult;
+            2'b01: Result = ReadData;
+            2'b10: Result = pc_plus4;
+            default: Result = 32'd0;
+        endcase
+    end
 
 endmodule
