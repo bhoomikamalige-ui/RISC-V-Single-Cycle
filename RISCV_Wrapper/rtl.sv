@@ -15,12 +15,10 @@ module riscvsingle(
     logic        PCSrc;
     logic        ALUSrc;
     logic        RegWrite;
-    logic        Jump;
     logic [1:0]  ImmSrc;
     logic [2:0]  ALUControl;
 
-    // Control Unit
-    controller control_unit (
+    controller c(
         .op(Instr[6:0]),
         .funct3(Instr[14:12]),
         .funct7b5(Instr[30]),
@@ -30,13 +28,12 @@ module riscvsingle(
         .PCSrc(PCSrc),
         .ALUSrc(ALUSrc),
         .RegWrite(RegWrite),
-        .Jump(Jump),
+        .Jump(),
         .ImmSrc(ImmSrc),
         .ALUControl(ALUControl)
     );
 
-    // Datapath
-    datapath dp (
+    datapath dp(
         .clk(clk),
         .reset(reset),
         .ResultSrc(ResultSrc),
