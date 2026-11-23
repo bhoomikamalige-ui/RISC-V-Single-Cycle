@@ -1,4 +1,3 @@
-
 module datapath(
     input  logic        clk,
     input  logic        reset,
@@ -16,81 +15,70 @@ module datapath(
     input  logic [31:0] ReadData
 );
 
-    logic [31:0] pc_next, pc_plus4, pc_target;
-    logic [31:0] rd1, rd2, srcB;
-    logic [31:0] ImmExt, Result;
-    logic [31:0] regs [0:31];
-
-    integer i;
+    logic [31:0] PCNext, PCPlus4, PCTarget;
+    logic [31:0] RD1, RD2;
+    logic [31:0] ImmExt;
+    logic [31:0] SrcB;
+    logic [31:0] Result;
 
     // Program Counter
     always_ff @(posedge clk or posedge reset) begin
         if (reset)
             PC <= 32'h80000000;
         else
-            PC <= pc_next;
+            PC <= PCNext;
     end
 
-    assign pc_plus4 = PC + 32'd4;
-    assign pc_target = PC + (ImmExt << 1);
-    assign pc_next = PCSrc ? pc_target : pc_plus4;
+    assign PCPlus4 = PC + 32'd4;
 
     // Register File
-    assign rd1 = (Instr[19:15] == 0) ? 32'd0 : regs[Instr[19:15]];
-    assign rd2 = (Instr[24:20] == 0) ? 32'd0 : regs[Instr[24:20]];
-
-    always_ff @(posedge clk or posedge reset) begin
-        if (reset) begin
-            for (i = 0; i < 32; i = i + 1)
-                regs[i] <= 32'd0;
-        end
-        else if (RegWrite && (Instr[11:7] != 0)) begin
-            regs[Instr[11:7]] <= Result;
-        end
-    end
-
-    assign WriteData = rd2;
+    regfile rf(
+        .clk(clk),
+        .we3(RegWrite),
+        .a1(Instr[19:15]),
+        .a2(Instr[24:20]),
+        .a3(Instr[11:7]),
+        .wd3(Result),
+        .rd1(RD1),
+        .rd2(RD2)
+    );
 
     // Immediate Generator
-    always_comb begin
-        case (ImmSrc)
-            2'b00: ImmExt = {{20{Instr[31]}}, Instr[31:20]};
-            2'b01: ImmExt = {{20{Instr[31]}}, Instr[31:25], Instr[11:7]};
-            2'b10: ImmExt = {{19{Instr[31]}}, Instr[31], Instr[7],
-                              Instr[30:25], Instr[11:8]};
-            2'b11: ImmExt = {{11{Instr[31]}}, Instr[31], Instr[19:12],
-                              Instr[20], Instr[30:21]};
-            default: ImmExt = 32'd0;
-        endcase
-    end
+    extend ext(
+        .instr(Instr[31:7]),
+        .immsrc(ImmSrc),
+        .immext(ImmExt)
+    );
+
+    // ALU input selection
+    assign SrcB = ALUSrc ? ImmExt : RD2;
 
     // ALU
-    assign srcB = ALUSrc ? ImmExt : rd2;
+    alu alu_unit(
+        .SrcA(RD1),
+        .SrcB(SrcB),
+        .ALUControl(ALUControl),
+        .ALUResult(ALUResult),
+        .Zero(Zero)
+    );
 
-    always_comb begin
-        case (ALUControl)
-            3'b000: ALUResult = rd1 + srcB;
-            3'b001: ALUResult = rd1 - srcB;
-            3'b010: ALUResult = rd1 & srcB;
-            3'b011: ALUResult = rd1 | srcB;
-            3'b100: ALUResult = rd1 ^ srcB;
-            3'b101: ALUResult = ($signed(rd1) < $signed(srcB)) ? 32'd1 : 32'd0;
-            3'b110: ALUResult = rd1 << srcB[4:0];
-            3'b111: ALUResult = rd1 >> srcB[4:0];
-            default: ALUResult = 32'd0;
-        endcase
-    end
+    // Memory write data
+    assign WriteData = RD2;
 
-    assign Zero = (ALUResult == 32'd0);
+    // Branch / Jump target
+    assign PCTarget = PC + (ImmExt << 1);
 
-    // Write-back Result Multiplexer
+    // Write-back selection
     always_comb begin
         case (ResultSrc)
             2'b00: Result = ALUResult;
             2'b01: Result = ReadData;
-            2'b10: Result = pc_plus4;
-            default: Result = 32'd0;
+            2'b10: Result = PCPlus4;
+            default: Result = 32'b0;
         endcase
     end
+
+    // Next PC selection
+    assign PCNext = PCSrc ? PCTarget : PCPlus4;
 
 endmodule
