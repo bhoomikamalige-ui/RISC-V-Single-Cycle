@@ -8,16 +8,11 @@ module dmem(
 );
 
     logic [31:0] mem [0:63];
-    integer i;
-
-    // Initialize all 64 words
-    initial begin
-        for (i = 0; i < 64; i = i + 1)
-            mem[i] = 32'b0;
-    end
 
     // Combinational read
-    assign rd = mem[a[7:2]];
+    always_comb begin
+        rd = mem[a[7:2]];
+    end
 
     // Synchronous write
     always_ff @(posedge clk) begin
