@@ -1,4 +1,3 @@
-
 module riscvsingle(
     input  logic        clk,
     input  logic        reset,
@@ -10,15 +9,16 @@ module riscvsingle(
     input  logic [31:0] ReadData
 );
 
-    logic        Zero;
-    logic [1:0]  ResultSrc;
-    logic        PCSrc;
-    logic        ALUSrc;
-    logic        RegWrite;
-    logic [1:0]  ImmSrc;
-    logic [2:0]  ALUControl;
+    logic [1:0] ResultSrc;
+    logic       PCSrc;
+    logic       ALUSrc;
+    logic       RegWrite;
+    logic [1:0] ImmSrc;
+    logic [2:0] ALUControl;
+    logic       Zero;
 
-    controller c(
+    // Controller
+    controller ctrl(
         .op(Instr[6:0]),
         .funct3(Instr[14:12]),
         .funct7b5(Instr[30]),
@@ -33,6 +33,7 @@ module riscvsingle(
         .ALUControl(ALUControl)
     );
 
+    // Datapath
     datapath dp(
         .clk(clk),
         .reset(reset),
